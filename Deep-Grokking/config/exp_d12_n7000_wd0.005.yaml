@@ -1,0 +1,58 @@
+#================================================================
+# Experiment Configuration Example for Grokking
+#================================================================
+
+#--------------------------------
+# Environment Settings
+#--------------------------------
+device: 'cuda'    # Device to use: 'cuda' or 'cpu'
+seed: 0           # Random seed for reproducibility
+
+#--------------------------------
+# Data & Model Architecture
+#--------------------------------
+data_dir: './data'
+input_dim: 784      # MNIST image flattened size (28*28)
+output_dim: 10      # Number of classes (digits 0-9)
+hidden_dim: 400     # Width of hidden layers
+n_train: 7000       # Number of training samples
+depth: 12            # Number of hidden layers
+alpha: 8.0          # Scale for weight initialization
+
+#--------------------------------
+# Training Hyperparameters
+#--------------------------------
+lr: 1.0e-3          # Learning rate for the main model
+weight_decay: 0.005 # L2 regularization strength
+batch_size: 128     # Batch size for training and evaluation
+max_steps: 100000   # Total training steps
+
+#--------------------------------
+# Logging & Checkpointing
+#--------------------------------
+log_interval: 1              # Step interval for logging basic metrics (loss, acc)
+save_dir: './checkpoints'       # Base directory to save model checkpoints
+
+# --- Metrics to Log ---
+# These flags control which metrics are logged at each `log_interval`.
+log_train_loss: true
+log_test_loss: true
+log_train_acc: true
+log_test_acc: true
+log_weight_norm: true
+
+#--------------------------------
+# Probing Analysis Settings
+#--------------------------------
+# Probing is a more expensive analysis run less frequently.
+probe_interval: 5000      # Step interval for running probing analysis
+probe_steps: 1000         # Number of training steps for the linear probe
+probe_lr: 1.0e-3          # Learning rate for the linear probe optimizer
+probe_eps: 1.0e-5         # Epsilon for effective rank calculation
+
+#--------------------------------
+# Weights & Biases Settings (Optional)
+#--------------------------------
+use_wandb: true
+project_name: 'deep_grokking'
+# Note: The run name is generated automatically by the training script.
