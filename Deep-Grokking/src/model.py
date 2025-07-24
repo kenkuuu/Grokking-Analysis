@@ -26,7 +26,7 @@ class MLP(nn.Module):
         
         layers = []
         # Create `depth` number of hidden layers
-        for i in range(depth):
+        for i in range(depth - 1):
             in_dim = input_dim if i == 0 else hidden_dim
             layers.append(nn.Linear(in_dim, hidden_dim))
             layers.append(nn.ReLU())

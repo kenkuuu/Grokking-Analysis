@@ -6,7 +6,6 @@ import random
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.nn.functional as F
 from tqdm import tqdm
 from itertools import cycle
 from typing import Dict, Any
@@ -14,6 +13,7 @@ from typing import Dict, Any
 from data import get_data_loaders
 from model import MLP
 import utils
+from utils import compute_accuracy, compute_loss
 
 # Optional: Weights & Biases for experiment tracking
 try:
@@ -50,10 +50,7 @@ def train(cfg: Dict[str, Any]):
     train_loader, test_loader = get_data_loaders(
         cfg['data_dir'], cfg['n_train'], cfg['batch_size'], cfg['seed']
     )
-    # Use cycle to create an infinite iterator over the training data
     train_iter = cycle(train_loader)
-    # Use a fixed test batch for faster evaluation during training
-    test_batch = next(iter(test_loader))
 
     # --- 3. Model, Optimizer, Loss ---
     model = MLP(
@@ -64,27 +61,28 @@ def train(cfg: Dict[str, Any]):
         alpha=cfg['alpha']
     ).to(device)
 
-    optimizer = optim.AdamW(
-        model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay']
-    )
-    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
+    
+    # Use MSELoss if specified, which requires one-hot encoded targets
+    criterion = nn.MSELoss() if cfg.get('loss_function', 'MSE') == 'MSE' else nn.CrossEntropyLoss()
 
     # --- 4. Training Loop ---
     log_interval = cfg.get('log_interval', 1000)
-    probe_interval = cfg.get('probe_interval', log_interval)
+    probe_interval = cfg.get('probe_interval', log_interval * 5)
 
     for step in tqdm(range(1, cfg['max_steps'] + 1), desc="Training"):
         model.train()
         x, y = next(train_iter)
         x, y = x.to(device), y.to(device)
 
-        # Forward pass
+        # Forward pass and loss calculation
         logits = model(x)
-        probs = F.softmax(logits, dim=1)
-        y_onehot = nn.functional.one_hot(y, num_classes=cfg['output_dim']).float().to(device)
-        loss_train = criterion(probs, y_onehot)
-        with torch.no_grad():
-            acc_train = (logits.argmax(dim=1) == y).float().mean().item()
+        if isinstance(criterion, nn.MSELoss):
+            y_target = nn.functional.one_hot(y, num_classes=cfg['output_dim']).float()
+        else:
+            y_target = y
+        
+        loss_train = criterion(logits, y_target)
 
         # Backward pass and optimization
         optimizer.zero_grad()
@@ -94,19 +92,26 @@ def train(cfg: Dict[str, Any]):
         # --- 5. Logging and Evaluation ---
         if step % log_interval == 0:
             model.eval()
+            
+            # Calculate metrics for the current training batch (for logging)
             with torch.no_grad():
-                tx, ty = test_batch
-                tx, ty = tx.to(device), ty.to(device)
-                logits_test = model(tx)
-                probs_test = F.softmax(logits_test, dim=1)
-                ty_onehot = nn.functional.one_hot(ty, num_classes=cfg['output_dim']).float().to(device)
-                loss_test = criterion(probs_test, ty_onehot)
-                acc_test = (logits_test.argmax(dim=1) == ty).float().mean().item()
+                acc_train = (logits.argmax(dim=1) == y).float().mean().item()
 
-            # Construct log dictionary based on config flags
+            # Calculate metrics over the entire test set for robust evaluation
+            loss_test = compute_loss(
+                model, test_loader.dataset, device,
+                loss_fn=cfg.get('loss_function', 'MSE'),
+                batch_size=cfg.get('eval_batch_size', 128)
+            )
+            acc_test = compute_accuracy(
+                model, test_loader.dataset, device,
+                batch_size=cfg.get('eval_batch_size', 128)
+            )
+
+            # Construct log dictionary
             log_dict = {'step': step}
             if cfg.get('log_train_loss', True): log_dict['train_loss'] = loss_train.item()
-            if cfg.get('log_test_loss', True): log_dict['test_loss'] = loss_test.item()
+            if cfg.get('log_test_loss', True): log_dict['test_loss'] = loss_test
             if cfg.get('log_train_acc', True): log_dict['train_acc'] = acc_train
             if cfg.get('log_test_acc', True): log_dict['test_acc'] = acc_test
             
@@ -156,10 +161,7 @@ def train(cfg: Dict[str, Any]):
 def main():
     """Parses arguments and runs the training script."""
     parser = argparse.ArgumentParser(description="Run a Grokking experiment on MNIST.")
-    parser.add_argument(
-        '--config', '-c', type=str, required=True,
-        help='Path to the YAML configuration file.'
-    )
+    parser.add_argument('--config', '-c', type=str, required=True, help='Path to the YAML configuration file.')
     args = parser.parse_args()
 
     with open(args.config, 'r') as f:

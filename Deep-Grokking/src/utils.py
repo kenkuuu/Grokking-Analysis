@@ -1,11 +1,13 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 from tqdm import tqdm
 from typing import List, Tuple, Dict
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
+from itertools import islice
 
-from model import MLP # Assumes model.py is in the same src directory
+from model import MLP # Assuming model.py is in the same src directory
 
 def feature_rank(features: np.ndarray, eps: float = 1e-5) -> int:
     """
@@ -68,43 +70,25 @@ def compute_feature_rank_and_probe(
 ) -> Tuple[List[int], List[float]]:
     """
     Computes feature rank and linear probe accuracy for each hidden layer.
-    
-    This function efficiently extracts all hidden representations in a single pass
-    over the dataset, then computes metrics for each layer.
-
-    Args:
-        model (MLP): The trained model.
-        loader (DataLoader): DataLoader for the test set.
-        device (str): Device to run computations on ('cpu' or 'cuda').
-        eps (float): Epsilon for effective rank calculation.
-        probe_steps (int): Number of training steps for the linear probe.
-        lr (float): Learning rate for the linear probe optimizer.
-
-    Returns:
-        Tuple[List[int], List[float]]: Lists of feature ranks and probe accuracies.
     """
     model.eval()
     
-    # Identify hidden layers (all linear layers except the last one)
     linear_layers = [m for m in model.net.children() if isinstance(m, nn.Linear)]
     hidden_layers = linear_layers[:-1]
     
-    # --- 1. Extract features from all layers in one pass ---
-    # Note: This is memory-intensive. For huge datasets, consider sampling.
     print("Probing: Extracting features from all layers...")
     features_per_layer: Dict[int, List[np.ndarray]] = {i: [] for i in range(len(hidden_layers))}
     all_labels = []
     
     with torch.no_grad():
         for x, y in tqdm(loader, desc="Feature Extraction"):
-            x = x.to(device)
+            x, y = x.to(device), y.to(device)
             all_labels.append(y.cpu().numpy())
             
             h = x
             layer_idx = 0
             for layer in model.net.children():
                 h = layer(h)
-                # If the layer is a ReLU, its output is the input to the next Linear layer
                 if isinstance(layer, nn.ReLU) and layer_idx < len(hidden_layers):
                     features_per_layer[layer_idx].append(h.cpu().numpy())
                     layer_idx += 1
@@ -114,37 +98,62 @@ def compute_feature_rank_and_probe(
         i: np.concatenate(feats, axis=0) for i, feats in features_per_layer.items()
     }
     
-    # --- 2. Compute rank and train probe for each layer's features ---
     print("Probing: Computing rank and training linear probes...")
     ranks, probe_accs = [], []
     for i in tqdm(range(len(hidden_layers)), desc="Probing Layers"):
         feats = concatenated_features[i]
-        
-        # a. Compute effective rank
         ranks.append(feature_rank(feats, eps))
-        
-        # b. Train a linear probe
-        acc = _train_linear_probe(
-            feats, concatenated_labels, device, probe_steps, lr, loader.batch_size
-        )
+        acc = _train_linear_probe(feats, concatenated_labels, device, probe_steps, lr, loader.batch_size)
         probe_accs.append(acc)
 
+    model.train() # Return model to training mode
     return ranks, probe_accs
 
-def load_model(path: str, device: str, **model_kwargs) -> MLP:
+def compute_accuracy(
+    model: nn.Module,
+    dataset: Dataset,
+    device: str,
+    batch_size: int = 128
+) -> float:
     """
-    Loads a pre-trained MLP model from a state dictionary.
-
-    Args:
-        path (str): Path to the .pt model state dictionary file.
-        device (str): Device to load the model onto.
-        **model_kwargs: Arguments required to instantiate the MLP model,
-                        e.g., input_dim, hidden_dim, etc.
-
-    Returns:
-        MLP: The loaded model in evaluation mode.
+    Computes accuracy over an entire dataset.
     """
-    model = MLP(**model_kwargs).to(device)
-    model.load_state_dict(torch.load(path, map_location=device))
     model.eval()
-    return model
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+    correct = total = 0
+    with torch.no_grad():
+        for x, y in loader:
+            x, y = x.to(device), y.to(device)
+            logits = model(x)
+            preds = logits.argmax(dim=1)
+            correct += (preds == y).sum().item()
+            total   += x.size(0)
+    model.train()
+    return correct / total
+
+def compute_loss(
+    model: nn.Module,
+    dataset: Dataset,
+    device: str,
+    loss_fn: str = "MSE",
+    batch_size: int = 128
+) -> float:
+    """
+    Computes the average loss over an entire dataset.
+    """
+    model.eval()
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+    total_loss = total = 0
+    with torch.no_grad():
+        for x, y in loader:
+            x, y = x.to(device), y.to(device)
+            logits = model(x)
+            if loss_fn == "MSE":
+                y_onehot = F.one_hot(y, num_classes=logits.shape[1]).float()
+                loss = F.mse_loss(logits, y_onehot, reduction="sum")
+            else:
+                loss = F.cross_entropy(logits, y, reduction="sum")
+            total_loss += loss.item()
+            total += x.size(0)
+    model.train()
+    return total_loss / total
