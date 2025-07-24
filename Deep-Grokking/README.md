@@ -1,9 +1,3 @@
-はい、承知いたしました。提供されたコードと論文の文脈に基づき、プロジェクトの目的、使い方、設定方法などを網羅した`README.md`ファイルを作成します。
-
-以下をコピーして、プロジェクトのルートディレクトリに `README.md` として保存してください。
-
------
-
 # Replication Study of "Beyond Memorization: The Role of Robustness in Grokking"
 
 This repository contains the code for a replication study of the paper:
