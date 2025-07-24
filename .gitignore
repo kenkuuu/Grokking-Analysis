@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+.venv/
+env/
+data/
+outputs/checkpoints/
+.ipynb_checkpoints/
+.env
+wandb/
+docker/
+**/dist/
+**/build/
+*.log
