@@ -6,6 +6,7 @@ import random
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import torch.nn.functional as F
 from tqdm import tqdm
 from itertools import cycle
 from typing import Dict, Any
@@ -69,7 +70,8 @@ def train(cfg: Dict[str, Any]):
     criterion = nn.MSELoss()
 
     # --- 4. Training Loop ---
-    probe_interval = cfg.get('probe_interval', cfg.get('log_interval', 1000))
+    log_interval = cfg.get('log_interval', 1000)
+    probe_interval = cfg.get('probe_interval', log_interval)
 
     for step in tqdm(range(1, cfg['max_steps'] + 1), desc="Training"):
         model.train()
@@ -78,8 +80,9 @@ def train(cfg: Dict[str, Any]):
 
         # Forward pass
         logits = model(x)
+        probs = F.softmax(logits, dim=1)
         y_onehot = nn.functional.one_hot(y, num_classes=cfg['output_dim']).float().to(device)
-        loss_train = criterion(logits, y_onehot)
+        loss_train = criterion(probs, y_onehot)
         with torch.no_grad():
             acc_train = (logits.argmax(dim=1) == y).float().mean().item()
 
@@ -89,14 +92,15 @@ def train(cfg: Dict[str, Any]):
         optimizer.step()
 
         # --- 5. Logging and Evaluation ---
-        if step % cfg['log_interval'] == 0:
+        if step % log_interval == 0:
             model.eval()
             with torch.no_grad():
                 tx, ty = test_batch
                 tx, ty = tx.to(device), ty.to(device)
                 logits_test = model(tx)
+                probs_test = F.softmax(logits_test, dim=1)
                 ty_onehot = nn.functional.one_hot(ty, num_classes=cfg['output_dim']).float().to(device)
-                loss_test = criterion(logits_test, ty_onehot)
+                loss_test = criterion(probs_test, ty_onehot)
                 acc_test = (logits_test.argmax(dim=1) == ty).float().mean().item()
 
             # Construct log dictionary based on config flags
@@ -118,7 +122,7 @@ def train(cfg: Dict[str, Any]):
                 print(log_str)
 
         # --- 6. Probing for Feature Rank and Quality ---
-        if step > 0 and step % probe_interval == 0:
+        if step % probe_interval == 0:
             model.eval()
             ranks, probe_accs = utils.compute_feature_rank_and_probe(
                 model=model, loader=test_loader, device=device,
