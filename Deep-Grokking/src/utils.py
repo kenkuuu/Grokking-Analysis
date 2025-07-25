@@ -6,6 +6,7 @@ from tqdm import tqdm
 from typing import List, Tuple, Dict
 from torch.utils.data import DataLoader, Dataset
 from itertools import islice
+from typing import Optional
 
 from model import MLP # Assuming model.py is in the same src directory
 
@@ -113,39 +114,51 @@ def compute_accuracy(
     model: nn.Module,
     dataset: Dataset,
     device: str,
-    batch_size: int = 128
+    batch_size: int = 128,
+    N: Optional[int] = None
 ) -> float:
     """
-    Computes accuracy over an entire dataset.
+    Computes accuracy over a dataset, optionally on a subset of N samples.
     """
     model.eval()
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+    # Shuffling is recommended for random subset evaluation.
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     correct = total = 0
+
+    # If N is None, use the full dataset; otherwise, use a subset of size N.
+    iterator = loader if N is None else islice(loader, N // batch_size)
+    
     with torch.no_grad():
-        for x, y in loader:
+        for x, y in iterator:
             x, y = x.to(device), y.to(device)
             logits = model(x)
             preds = logits.argmax(dim=1)
             correct += (preds == y).sum().item()
-            total   += x.size(0)
+            total += x.size(0)
+
     model.train()
-    return correct / total
+    return correct / total if total > 0 else 0.0
 
 def compute_loss(
     model: nn.Module,
     dataset: Dataset,
     device: str,
     loss_fn: str = "MSE",
-    batch_size: int = 128
+    batch_size: int = 128,
+    N: Optional[int] = None
 ) -> float:
     """
-    Computes the average loss over an entire dataset.
+    Computes the average loss over a dataset, optionally on a subset of N samples.
     """
     model.eval()
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
     total_loss = total = 0
+
+    # If N is None, use the full dataset; otherwise, use a subset of size N.
+    iterator = loader if N is None else islice(loader, N // batch_size)
+
     with torch.no_grad():
-        for x, y in loader:
+        for x, y in iterator:
             x, y = x.to(device), y.to(device)
             logits = model(x)
             if loss_fn == "MSE":
@@ -155,5 +168,6 @@ def compute_loss(
                 loss = F.cross_entropy(logits, y, reduction="sum")
             total_loss += loss.item()
             total += x.size(0)
+            
     model.train()
-    return total_loss / total
+    return total_loss / total if total > 0 else 0.0

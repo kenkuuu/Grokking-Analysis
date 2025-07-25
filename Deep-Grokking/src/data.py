@@ -24,7 +24,6 @@ def get_data_loaders(
     # Standard normalization for MNIST
     transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,)),
         transforms.Lambda(lambda x: x.view(-1))
     ])
 

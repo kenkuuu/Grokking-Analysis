@@ -6,7 +6,7 @@
 # Environment Settings
 #--------------------------------
 device: 'cuda'    # Device to use: 'cuda' or 'cpu'
-seed: 0           # Random seed for reproducibility
+seed: 42           # Random seed for reproducibility
 
 #--------------------------------
 # Data & Model Architecture
@@ -24,13 +24,14 @@ alpha: 8.0          # Scale for weight initialization
 #--------------------------------
 lr: 1.0e-3          # Learning rate for the main model
 weight_decay: 0.01 # L2 regularization strength
-batch_size: 128     # Batch size for training and evaluation
+batch_size: 200     # Batch size for training and evaluation
 max_steps: 100000   # Total training steps
 
 #--------------------------------
 # Logging & Checkpointing
 #--------------------------------
-log_interval: 1              # Step interval for logging basic metrics (loss, acc)
+log_freq: 100              # Step interval for logging basic metrics (loss, acc)
+eval_samples: 2000
 save_dir: './checkpoints'       # Base directory to save model checkpoints
 
 # --- Metrics to Log ---
