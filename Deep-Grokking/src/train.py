@@ -61,7 +61,7 @@ def train(cfg: Dict[str, Any]):
         alpha=cfg['alpha']
     ).to(device)
 
-    optimizer = optim.AdamW(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
+    optimizer = optim.Adam(model.parameters(), lr=cfg['lr'], weight_decay=cfg['weight_decay'])
     
     criterion = nn.MSELoss() if cfg.get('loss_function', 'MSE') == 'MSE' else nn.CrossEntropyLoss()
 
@@ -100,26 +100,32 @@ def train(cfg: Dict[str, Any]):
         if (step < 30) or (step < 150 and step % 10 == 0) or (step % log_interval == 0):
             model.eval()
             
-            # Calculate metrics from the just-used training batch for logging
             with torch.no_grad():
-                train_loss_for_log = loss_for_backward.item()
-                train_acc_for_log = (logits.argmax(dim=1) == y).float().mean().item()
-
-            # Get the number of evaluation samples from config
-            eval_samples = cfg.get('eval_samples', 2000)
-
-            # Calculate loss/acc over the test set (or a subset)
-            loss_test = compute_loss(
-                model, test_loader.dataset, device,
-                loss_fn=cfg.get('loss_function', 'MSE'),
-                batch_size=cfg.get('eval_batch_size', cfg['batch_size']),
-                N=eval_samples
-            )
-            acc_test = compute_accuracy(
-                model, test_loader.dataset, device,
-                batch_size=cfg.get('eval_batch_size', cfg['batch_size']),
-                N=eval_samples
-            )
+                # Evaluate on the training set
+                train_loss_for_log = compute_loss(
+                    model, train_loader.dataset, device,
+                    loss_fn=cfg.get('loss_function', 'MSE'),
+                    batch_size=cfg.get('eval_batch_size', cfg['batch_size']),
+                    N=len(train_loader.dataset)
+                )
+                train_acc_for_log = compute_accuracy(
+                    model, train_loader.dataset, device,
+                    batch_size=cfg.get('eval_batch_size', cfg['batch_size']),
+                    N=len(train_loader.dataset)
+                )
+                
+                # Evaluate on the test set
+                loss_test = compute_loss(
+                    model, test_loader.dataset, device,
+                    loss_fn=cfg.get('loss_function', 'MSE'),
+                    batch_size=cfg.get('eval_batch_size', cfg['batch_size']),
+                    N=len(test_loader.dataset)
+                )
+                acc_test = compute_accuracy(
+                    model, test_loader.dataset, device,
+                    batch_size=cfg.get('eval_batch_size', cfg['batch_size']),
+                    N=len(test_loader.dataset)
+                )
 
             # Construct log dictionary
             log_dict = {}

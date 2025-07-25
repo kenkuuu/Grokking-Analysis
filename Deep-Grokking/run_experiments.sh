@@ -7,21 +7,21 @@
 
 # An array of YAML configuration files for the experiments.
 configs=(
-  "config/exp_d4_n2000_wd0.005.yaml"
-  "config/exp_d4_n5000_wd0.005.yaml"
-  "config/exp_d4_n7000_wd0.005.yaml"
-  "config/exp_d8_n2000_wd0.005.yaml"
-  "config/exp_d8_n5000_wd0.005.yaml"
-  "config/exp_d8_n7000_wd0.005.yaml"
-  "config/exp_d12_n2000_wd0.005.yaml"
-  "config/exp_d12_n5000_wd0.005.yaml"
-  "config/exp_d12_n7000_wd0.005.yaml"
+  "config/exp_d4_n2000_wd0.01.yaml"
+  "config/exp_d4_n5000_wd0.01.yaml"
+  "config/exp_d4_n7000_wd0.01.yaml"
+  "config/exp_d8_n2000_wd0.01.yaml"
+  "config/exp_d8_n5000_wd0.01.yaml"
+  "config/exp_d8_n7000_wd0.01.yaml"
+  "config/exp_d12_n2000_wd0.01.yaml"
+  "config/exp_d12_n5000_wd0.01.yaml"
+  "config/exp_d12_n7000_wd0.01.yaml"
 )
 
 # Set the maximum number of concurrent jobs.
 # Adjust this based on your GPU's VRAM and the model's memory footprint.
 # Start with 2 and increase cautiously.
-MAX_JOBS=2
+MAX_JOBS=3
 
 # --- Execution Logic ---
 
